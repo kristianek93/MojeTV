@@ -1,67 +1,74 @@
-console.log("GitHub Core: Startuji TizenTube Custom (Premium Edition)...");
+console.log("GitHub Core: Načítám TizenTube Logic...");
 
-// --- 1. KONFIGURACE USER AGENTA (Aby to vypadalo jako moderní TV) ---
+// 1. ZMĚNA IDENTITY (Moderní TV)
 var fakeUA = 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 5.0) AppleWebKit/537.3 (KHTML, like Gecko) SamsungBrowser/2.1 TV Safari/537.3';
 try {
     Object.defineProperty(navigator, 'userAgent', { get: function() { return fakeUA; } });
 } catch(e) {}
 
-// --- 2. CSS FIX PRO ČTVERCOVÁ VIDEA A ROZLOŽENÍ ---
-function injectCSS() {
-    var style = document.createElement('style');
-    style.type = 'text/css';
-    style.innerHTML = `
-        /* Donutit video, aby se vešlo do obrazovky a neořezávalo se (fix pro čtvercová videa) */
-        video {
-            object-fit: contain !important;
-        }
-        .html5-video-player {
-            background-color: #000 !important;
-        }
-        /* Skrytí scrollbarů, kdyby náhodou */
-        body { overflow: hidden !important; }
-    `;
-    document.head.appendChild(style);
-    console.log("CSS Fix aplikován.");
-}
-
-// --- 3. HACK PRO BĚH NA POZADÍ (PREMIUM FEATURE) ---
-// YouTube se snaží video stopnout, když zjistí "visibilityState === hidden".
-// My mu budeme tvrdit, že je pořád "visible".
-function enableBackgroundPlay() {
+// 2. FUNKCE PRO BĚH NA POZADÍ (Klíčová část!)
+function setupBackgroundPlay() {
     try {
-        // Zablokujeme událost, která hlásí změnu viditelnosti
-        document.addEventListener('visibilitychange', function(e) {
+        // Povolíme naslouchání na tlačítko Zpět (Return)
+        if (window.tizen && tizen.tv && tizen.tv.inputdevice) {
+            tizen.tv.inputdevice.registerKey('Return');
+        }
+
+        // Hack proti zastavení videa při minimalizaci
+        document.addEventListener("visibilitychange", function(e) {
             e.stopImmediatePropagation();
         }, true);
-        
-        // Přepíšeme vlastnost 'hidden' a 'visibilityState' v dokumentu
         Object.defineProperty(document, 'hidden', { get: function() { return false; } });
         Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
-        
-        // Pro jistotu zablokujeme i webkit verzi
-        Object.defineProperty(document, 'webkitHidden', { get: function() { return false; } });
-        Object.defineProperty(document, 'webkitVisibilityState', { get: function() { return 'visible'; } });
-        
-        console.log("Background Play Hack: Aktivní 🎵");
-    } catch(e) {
-        console.log("Chyba Background Hacku: " + e.message);
+
+        console.log("✅ Background Play: Povoleno");
+    } catch (e) {
+        console.log("❌ Chyba Background Play: " + e.message);
     }
 }
 
-// --- 4. SPUŠTĚNÍ ---
+// 3. OBSLUHA TLAČÍTEK (Aby se aplikace nezavřela, ale jen skryla)
+document.addEventListener('keydown', function(e) {
+    // Kód 10009 je tlačítko "Return" (Zpět)
+    if (e.keyCode === 10009) {
+        // Pokud jsme na hlavní stránce YouTube nebo přehráváme video...
+        // ...nechceme aplikaci zavřít, ale SKRÝT.
+        
+        // Zde je logika: Pokud už není kam jít "zpět" v historii prohlížeče,
+        // normálně by se appka zavřela. My ji místo toho schováme.
+        if (window.location.href.indexOf("youtube.com") > -1) {
+             // Zkusíme zjistit, jestli uživatel nechce jen zavřít menu
+             // (Tohle je zjednodušené, TizenTube to má složitější, ale toto by mělo stačit pro Premium)
+             try {
+                 e.preventDefault(); // Zrušíme "Zavření aplikace"
+                 console.log("Minimalizuji aplikaci (Hudba by měla hrát dál)...");
+                 tizen.application.getCurrentApplication().hide(); // SKRYTÍ
+             } catch (err) {
+                 console.log("Chyba při skrývání: " + err.message);
+             }
+        }
+    }
+});
+
+// 4. FIX POMĚRU STRAN (Square Video)
+function fixAspectRatio() {
+    var style = document.createElement('style');
+    style.innerHTML = `
+        video { object-fit: contain !important; }
+        .video-stream { object-fit: contain !important; }
+        .html5-video-player { background-color: #000 !important; }
+    `;
+    document.head.appendChild(style);
+}
+
+// 5. START APLIKACE
 setTimeout(function() {
-    // Pokud ještě nejsme na YouTube, přesměrujeme
     if (window.location.host.indexOf("youtube.com") === -1) {
-        console.log("Jdu na YouTube...");
         window.location.replace("https://www.youtube.com/tv");
     } else {
-        // Pokud už jsme na YouTube (načetla se stránka), aplikujeme fixy
-        console.log("Injektuji vylepšení...");
-        injectCSS();
-        enableBackgroundPlay();
-        
-        // Občas YouTube přepíše CSS po načtení videa, takže to tam budeme cpát opakovaně
-        setInterval(injectCSS, 5000);
+        setupBackgroundPlay();
+        fixAspectRatio();
+        // Opakovaný fix, protože YouTube ty styly občas přepíše
+        setInterval(fixAspectRatio, 3000);
     }
 }, 1000);
