@@ -1,57 +1,67 @@
-console.log("GitHub Core: Startuji TizenTube Mode...");
+console.log("GitHub Core: Startuji TizenTube Custom (Premium Edition)...");
 
-// 1. Změna identity (Tváříme se jako moderní TV, aby fungovalo přihlášení a novinky)
-// Pokud by to zlobilo, můžeme zkusit jiné UA
+// --- 1. KONFIGURACE USER AGENTA (Aby to vypadalo jako moderní TV) ---
 var fakeUA = 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 5.0) AppleWebKit/537.3 (KHTML, like Gecko) SamsungBrowser/2.1 TV Safari/537.3';
-
 try {
-    Object.defineProperty(navigator, 'userAgent', {
-        get: function() { return fakeUA; }
-    });
-} catch(e) {
-    console.log("Nepodařilo se změnit UserAgent: " + e.message);
-}
+    Object.defineProperty(navigator, 'userAgent', { get: function() { return fakeUA; } });
+} catch(e) {}
 
-// 2. Funkce pro automatické klikání na "Přeskočit reklamu" (AdSkip)
-function autoSkipAds() {
-    setInterval(function() {
-        try {
-            // Hledáme tlačítko "Přeskočit"
-            var skipBtn = document.querySelector('.ytp-ad-skip-button');
-            if (skipBtn) {
-                console.log("Reklama detekována -> Klikám Skip");
-                skipBtn.click();
-            }
-            
-            // Hledáme tlačítko "Přeskočit" (moderní verze)
-            var skipBtnModern = document.querySelector('.ytp-ad-skip-button-modern');
-            if (skipBtnModern) {
-                skipBtnModern.click();
-            }
-
-            // Pokud je tam overlay reklama (baner dole), zavřeme ho
-            var overlayClose = document.querySelector('.ytp-ad-overlay-close-button');
-            if (overlayClose) {
-                overlayClose.click();
-            }
-
-        } catch (e) {
-            // Ignorujeme chyby, jen to zkoušíme dál
+// --- 2. CSS FIX PRO ČTVERCOVÁ VIDEA A ROZLOŽENÍ ---
+function injectCSS() {
+    var style = document.createElement('style');
+    style.type = 'text/css';
+    style.innerHTML = `
+        /* Donutit video, aby se vešlo do obrazovky a neořezávalo se (fix pro čtvercová videa) */
+        video {
+            object-fit: contain !important;
         }
-    }, 1000); // Kontrola každou sekundu
+        .html5-video-player {
+            background-color: #000 !important;
+        }
+        /* Skrytí scrollbarů, kdyby náhodou */
+        body { overflow: hidden !important; }
+    `;
+    document.head.appendChild(style);
+    console.log("CSS Fix aplikován.");
 }
 
-// 3. Spuštění
-setTimeout(function() {
-    console.log("Jdu na YouTube...");
-    
-    // Spustíme hlídače reklam
-    autoSkipAds();
+// --- 3. HACK PRO BĚH NA POZADÍ (PREMIUM FEATURE) ---
+// YouTube se snaží video stopnout, když zjistí "visibilityState === hidden".
+// My mu budeme tvrdit, že je pořád "visible".
+function enableBackgroundPlay() {
+    try {
+        // Zablokujeme událost, která hlásí změnu viditelnosti
+        document.addEventListener('visibilitychange', function(e) {
+            e.stopImmediatePropagation();
+        }, true);
+        
+        // Přepíšeme vlastnost 'hidden' a 'visibilityState' v dokumentu
+        Object.defineProperty(document, 'hidden', { get: function() { return false; } });
+        Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
+        
+        // Pro jistotu zablokujeme i webkit verzi
+        Object.defineProperty(document, 'webkitHidden', { get: function() { return false; } });
+        Object.defineProperty(document, 'webkitVisibilityState', { get: function() { return 'visible'; } });
+        
+        console.log("Background Play Hack: Aktivní 🎵");
+    } catch(e) {
+        console.log("Chyba Background Hacku: " + e.message);
+    }
+}
 
-    // Pokud už jsme na YouTube, jen reloadneme, jinak přesměrujeme
-    if (window.location.href.indexOf("youtube.com") > -1) {
-        // Už jsme tam, nic neděláme, jen injectujeme skripty
-    } else {
+// --- 4. SPUŠTĚNÍ ---
+setTimeout(function() {
+    // Pokud ještě nejsme na YouTube, přesměrujeme
+    if (window.location.host.indexOf("youtube.com") === -1) {
+        console.log("Jdu na YouTube...");
         window.location.replace("https://www.youtube.com/tv");
+    } else {
+        // Pokud už jsme na YouTube (načetla se stránka), aplikujeme fixy
+        console.log("Injektuji vylepšení...");
+        injectCSS();
+        enableBackgroundPlay();
+        
+        // Občas YouTube přepíše CSS po načtení videa, takže to tam budeme cpát opakovaně
+        setInterval(injectCSS, 5000);
     }
 }, 1000);
